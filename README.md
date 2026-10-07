@@ -1,113 +1,79 @@
-# 📚 OpenLibrary Books Collector & Filter
+# 📚 OpenLibrary Books Fetcher & Filter
 
-پروژه‌ی دریافت، پردازش، فیلتر و ذخیره‌سازی داده‌های کتاب‌ها از API عمومی **OpenLibrary** با زبان پایتون.
+![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Requests](https://img.shields.io/badge/Requests-2.31+-005571?style=for-the-badge)
+![API](https://img.shields.io/badge/API-OpenLibrary-02735E?style=for-the-badge)
+![Output](https://img.shields.io/badge/Output-CSV-E36209?style=for-the-badge)
 
----
-
-## 📋 معرفی پروژه
-
-این اسکریپت با ارسال درخواست به API عمومی [OpenLibrary Search API](https://openlibrary.org/dev/docs/api/search)، اطلاعات ۵۰ کتاب را دریافت کرده، آن‌ها را بر اساس سال اولین انتشار (First Publish Year) فیلتر می‌کند تا تنها کتاب‌هایی که پس از سال **۲۰۰۰** منتشر شده‌اند نگه‌داری شوند، و در نهایت خروجی مرتب و ساختاریافته را در قالب یک فایل **CSV** با فرمت استاندارد ذخیره می‌نماید.
-
----
-
-## ✨ ویژگی‌ها
-
-- **اتصال استاندارد به API**: استفاده از کتابخانه قدرتمند `requests` همراه با هدرهای استاندارد (`User-Agent`) و مدیریت زمان انتظار (Timeout).
-- **بهینه‌سازی ترافیک و سرعت**: دریافت فیلدهای مورد نیاز (`fields`) مستقیماً از سمت سرور برای افزایش سرعت دانلود و کاهش مصرف پهنای باند.
-- **پردازش و پالایش داده‌ها**: فیلتر دقیق کتاب‌های منتشر شده بعد از سال ۲۰۰۰ (`publish_year > 2000`) و پاک‌سازی داده‌های ناقص یا مقادیر خالی.
-- **خروجی تمیز و خوانا (CSV)**: ذخیره داده‌ها با انکودینگ `utf-8-sig` به منظور باز شدن بی‌نقص در نرم‌افزارهایی چون مایکروسافت اکسل بدون به‌هم‌ریختگی کاراکترها.
-- **پشتیبانی از CLI و آرگومان‌ها**: امکان شخصی‌سازی کوئری، تعداد دریافت، سال فیلتر و مسیر ذخیره فایل از طریق خط فرمان (`argparse`).
-- **کدنویسی تمیز و استاندارد (Clean Code)**: رعایت اصول PEP 8، استفاده از `Type Hints`، کلاس‌های داده‌ای (`dataclass`) و مستندات کامل (Docstrings).
-- **تست‌های واحد (Unit Tests)**: دارای ۸ تست مجزا جهت اطمینان از صحت اعتبارسنجی داده‌ها، استخراج سال، منطق فیلترینگ و خروجی CSV.
+A clean and lightweight Python script that queries the public [OpenLibrary Search API](https://openlibrary.org/dev/docs/api/search) for 50 books, filters those published strictly after the year 2000 (`first_publish_year > 2000`), and exports the curated dataset into an organized CSV file.
 
 ---
 
-## 📁 ساختار پروژه
+## 🇬🇧 English Guide
 
-```text
-backend-api-books/
-├── main.py              # اسکریپت اصلی دریافت، فیلتر و تولید خروجی
-├── test_main.py         # تست‌های واحد با ماژول استاندارد unittest
-├── books.csv            # فایل خروجی تولید شده شامل کتاب‌های فیلتر شده
-├── requirements.txt     # پیش‌نیازها و پکیج‌های پایتون
-├── .gitignore           # فایل نادیده‌گیری فایل‌های جانبی در گیت
-└── README.md            # مستندات کامل پروژه
-```
+### 🚀 Quick Start
 
----
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## ⚙️ پیش‌نیازها و نصب
+2. **Run the script:**
+   ```bash
+   python main.py
+   ```
 
-۱. اطمینان حاصل کنید که پایتون ۳.۸ یا بالاتر بر روی سیستم شما نصب است:
-```bash
-python --version
-```
+3. **(Optional) Run unit tests:**
+   ```bash
+   python -m unittest test_main.py -v
+   ```
 
-۲. ساخت و فعال‌سازی محیط مجازی (Virtual Environment - اختیاری اما توصیه می‌شود):
-```bash
-# ویندوز:
-python -m venv .venv
-.venv\Scripts\activate
+### 📊 Output Schema (`books.csv`)
 
-# لینوکس و مک:
-python3 -m venv .venv
-source .venv/bin/activate
-```
+The exported `books.csv` file uses UTF-8 BOM encoding (`utf-8-sig`) for Excel compatibility and contains the following columns:
 
-۳. نصب وابستگی‌ها:
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## 🚀 نحوه اجرا
-
-### ۱. اجرای ساده (تنظیمات پیش‌فرض)
-تنها با اجرای دستور زیر، ۵۰ کتاب با موضوع `python` دریافت شده، موارد بعد از سال ۲۰۰۰ فیلتر شده و در فایل `books.csv` ذخیره می‌گردد:
-
-```bash
-python main.py
-```
-
-### ۲. اجرای سفارشی با پارامترهای اختیاری
-می‌توانید کلمه کلیدی، سقف دریافت، سال فیلتر و نام فایل خروجی را تغییر دهید:
-
-```bash
-python main.py --query "programming" --limit 50 --min-year 2000 --output "filtered_books.csv"
-```
-
-#### پارامترهای خط فرمان:
-| پارامتر | مقدار پیش‌فرض | توضیحات |
+| Column | Description | Example |
 | :--- | :--- | :--- |
-| `--query` | `python` | کلمه کلیدی جستجو در OpenLibrary |
-| `--limit` | `50` | تعداد کتاب‌های دریافتی از API |
-| `--min-year` | `2000` | حد آستانه سال انتشار (کتاب‌های با سال بزرگ‌تر از این مقدار نگه‌داری می‌شوند) |
-| `--output` | `books.csv` | نام و مسیر فایل CSV خروجی |
+| **Title** | Name of the book | *Fluent Python* |
+| **Authors** | Author(s) of the book | *Luciano Ramalho* |
+| **First Publish Year** | Year of first publication (`> 2000`) | *2015* |
+| **Publisher** | Publisher name | *O'Reilly* |
+| **Pages** | Page count | *821* |
+| **Language** | Language code | *eng* |
+| **ISBN** | Standard Book Number | *9781491957660* |
+| **OpenLibrary URL** | Direct link to the work | `https://openlibrary.org/works/...` |
 
 ---
 
-## 📊 ستون‌های فایل CSV خروجی
+## 🇮🇷 راهنمای فارسی
 
-فایل `books.csv` با ستون‌های زیر ایجاد می‌شود:
+این پروژه یک اسکریپت ساده و استاندارد پایتون است که اطلاعات ۵۰ کتاب را از API عمومی OpenLibrary دریافت کرده، کتاب‌های منتشر شده بعد از سال ۲۰۰۰ را فیلتر می‌کند و در نهایت در فایل مرتب `books.csv` ذخیره می‌نماید.
 
-1. **Title**: عنوان کامل کتاب
-2. **Authors**: نام نویسنده(گان) کتاب (جداشده با کاما)
-3. **First Publish Year**: سال اولین انتشار اثر
-4. **Publisher**: نام ناشر(ان)
-5. **Pages**: میانگین تعداد صفحات کتاب
-6. **Language**: کدهای زبان کتاب (مانند `eng`)
-7. **ISBN**: شماره استاندارد بین‌المللی کتاب (شابک)
-8. **OpenLibrary URL**: لینک مستقیم اثر در سایت OpenLibrary
+### 🚀 نحوه اجرا
 
----
+۱. **نصب وابستگی‌ها:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## 🧪 اجرای تست‌های واحد
+۲. **اجرای اسکریپت:**
+   ```bash
+   python main.py
+   ```
 
-برای اجرای تست‌های واحد و اعتبارسنجی توابع:
+۳. **اجرای تست‌های واحد (اختیاری):**
+   ```bash
+   python -m unittest test_main.py -v
+   ```
 
-```bash
-python -m unittest test_main.py -v
-```
+### 📁 ستون‌های فایل خروجی (`books.csv`)
 
-تمام ۸ تست با موفقیت و بدون خطا پاس می‌شوند.
+فایل خروجی با فرمت استاندارد `utf-8-sig` (جهت باز شدن صحیح در مایکروسافت اکسل) ذخیره می‌شود و شامل ستون‌های زیر است:
+- **Title**: عنوان کتاب
+- **Authors**: نویسنده(گان)
+- **First Publish Year**: سال اولین انتشار (فقط بعد از سال ۲۰۰۰)
+- **Publisher**: ناشر
+- **Pages**: تعداد صفحات
+- **Language**: زبان
+- **ISBN**: شابک
+- **OpenLibrary URL**: لینک مستقیم به صفحه کتاب در سایت OpenLibrary
