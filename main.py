@@ -1,93 +1,103 @@
-"""اسکریپت دریافت، فیلتر و ذخیره‌سازی اطلاعات کتاب‌ها از OpenLibrary API."""
+"""دریافت کتاب‌ها از OpenLibrary و ذخیره‌سازی بهینه در PostgreSQL با FastAPI و SQLAlchemy."""
 
-import csv
 import sys
 import requests
+from fastapi import Depends, FastAPI
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
 
+from database import Base, SessionLocal, engine, get_db
+from models import Book
+from schemas import BookResponse
 
 API_URL = "https://openlibrary.org/search.json"
 PARAMS = {
-    "q": "python",  
-    "limit": 50,    
-    "fields": "title,author_name,first_publish_year,publisher,language,number_of_pages_median,isbn,key",
+    "q": "python",
+    "limit": 50,
+    "fields": "key,title,author_name,first_publish_year,publisher,language,number_of_pages_median,isbn",
 }
-HEADERS = {
-    "User-Agent": "BootcampBookFetcher/1.0"
-}
+HEADERS = {"User-Agent": "BootcampBookFetcher/1.0"}
+
+app = FastAPI(title="OpenLibrary Books API")
 
 
-def fetch_books() -> list[dict]:
-    
-    try:
-        print("[*] Fetching 50 books from OpenLibrary API...")
-        response = requests.get(API_URL, params=PARAMS, headers=HEADERS, timeout=20)
-        response.raise_for_status() 
-        books = response.json().get("docs", [])
-        print(f"[+] Successfully fetched {len(books)} books from API.")
-        return books
-    except requests.RequestException as error:
-        print(f"[-] API request failed: {error}")
-        sys.exit(1)
+def fetch_and_filter_books() -> list[dict]:
+    """دریافت ۵۰ کتاب و فیلتر موارد بعد از سال ۲۰۰۰ با پیچیدگی زمانی O(N)."""
+    response = requests.get(API_URL, params=PARAMS, headers=HEADERS, timeout=20)
+    response.raise_for_status()
+    docs = response.json().get("docs", [])
 
-
-def filter_books_after_2000(books: list[dict]) -> list[dict]:
-    
     filtered = []
-    for book in books:
-        year = book.get("first_publish_year")
-
-        if year and year > 2000:
-
-            authors = ", ".join(book.get("author_name", [])) if book.get("author_name") else "Unknown"
-            publishers = ", ".join(book.get("publisher", [])[:2]) if book.get("publisher") else "N/A"
-            languages = ", ".join(book.get("language", [])[:2]) if book.get("language") else "N/A"
-            isbn = book.get("isbn")[0] if book.get("isbn") else "N/A"
-            pages = book.get("number_of_pages_median") or "N/A"
-            key = book.get("key", "")
-            url = f"https://openlibrary.org{key}" if key else "N/A"
-
+    for doc in docs:
+        year = doc.get("first_publish_year")
+        key = doc.get("key")
+        if year and year > 2000 and key:
+            pages = doc.get("number_of_pages_median")
             filtered.append({
-                "Title": book.get("title", "Untitled"),
-                "Authors": authors,
-                "First Publish Year": year,
-                "Publisher": publishers,
-                "Pages": pages,
-                "Language": languages,
-                "ISBN": isbn,
-                "OpenLibrary URL": url,
+                "openlibrary_key": key,
+                "title": doc.get("title", "Untitled"),
+                "authors": ", ".join(doc.get("author_name", [])) if doc.get("author_name") else "Unknown",
+                "first_publish_year": year,
+                "publisher": ", ".join(doc.get("publisher", [])[:2]) if doc.get("publisher") else None,
+                "pages": pages if isinstance(pages, int) and pages > 0 else None,
+                "language": ", ".join(doc.get("language", [])[:2]) if doc.get("language") else None,
+                "isbn": doc.get("isbn")[0] if doc.get("isbn") else None,
+                "openlibrary_url": f"https://openlibrary.org{key}",
             })
-
-    print(f"[+] Filtered {len(filtered)} books published after year 2000.")
     return filtered
 
 
-def save_to_csv(books: list[dict], filename: str = "books.csv") -> None:
-    if not books:
-        print("[-] No books to save.")
-        return
+def save_books_to_db(db: Session, books_data: list[dict]) -> int:
+    """درج دسته‌ای (Bulk Insert) در یک کوئری واحد بدون تکرار داده‌ها."""
+    if not books_data:
+        return 0
 
-    with open(filename, mode="w", newline="", encoding="utf-8-sig") as file:
-        writer = csv.DictWriter(file, fieldnames=list(books[0].keys()))
-        writer.writeheader()
-        writer.writerows(books)
+    stmt = (
+        pg_insert(Book)
+        .values(books_data)
+        .on_conflict_do_nothing(index_elements=["openlibrary_key"])
+    )
+    result = db.execute(stmt)
+    db.commit()
+    return result.rowcount
 
-    print(f"[+] Successfully saved {len(books)} books to '{filename}'.")
+
+@app.post("/books/sync")
+def sync_books(db: Session = Depends(get_db)):
+    """اندپوینت دریافت کتاب‌ها از OpenLibrary و ذخیره در دیتابیس."""
+    Base.metadata.create_all(bind=engine)
+    books_data = fetch_and_filter_books()
+    inserted_count = save_books_to_db(db, books_data)
+    return {
+        "filtered_after_2000": len(books_data),
+        "newly_inserted": inserted_count,
+    }
+
+
+@app.get("/books", response_model=list[BookResponse])
+def get_books(db: Session = Depends(get_db)):
+    """اندپوینت مشاهده تمام کتاب‌های ذخیره‌شده به ترتیب سال انتشار."""
+    return db.query(Book).order_by(Book.first_publish_year.desc()).all()
 
 
 def main():
-    print("=" * 60)
-    print("OpenLibrary Books Fetcher & Filter")
-    print("=" * 60)
+    print("[*] Creating 'books' table in PostgreSQL (if not exists)...")
+    Base.metadata.create_all(bind=engine)
 
-    raw_books = fetch_books()
+    print("[*] Fetching 50 books and filtering (year > 2000)...")
+    books_data = fetch_and_filter_books()
+    print(f"[+] Filtered {len(books_data)} books published after 2000.")
 
-    filtered_books = filter_books_after_2000(raw_books)
+    with SessionLocal() as db:
+        inserted = save_books_to_db(db, books_data)
+        total = db.query(Book).count()
 
-    save_to_csv(filtered_books, "books.csv")
-
-    print("=" * 60)
-    print("[+] Process completed successfully.")
+    print(f"[+] Newly inserted: {inserted} | Total books in DB: {total}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as err:
+        print(f"[-] Error: {err}")
+        sys.exit(1)
